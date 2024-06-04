@@ -1,6 +1,7 @@
 package main
 
 import (
+	"birthday-service/internal/api"
 	"net/http"
 
 	"github.com/gorilla/mux"
@@ -33,22 +34,24 @@ func main() {
 	notificationHandler := notification.NewNotificationHandler(notificationService)
 
 	subscriptionService := notification.NewSubscriptionService()
-	subscriptionHandler := notification.NewSubscriptionHandler(subscriptionService)
+	settingsService := notification.NewSettingsService()
+	subscriptionHandler := api.NewSubscriptionHandler(subscriptionService, settingsService)
 
-	notyfyService := notification.NewNotifyService(subscriptionService, employeeService, authService)
+	notifyService := notification.NewNotifyService(subscriptionService, employeeService, authService)
 
 	r.Handle("/auth", authHandler).Methods("POST", "GET")
 	r.Handle("/employee/{id:[0-9]+}", employeeHandler).Methods("GET", "PUT", "DELETE")
 	r.Handle("/employee", employeeHandler).Methods("POST")
 	r.Handle("/notification/{id:[0-9]+}", notificationHandler).Methods("GET", "DELETE")
 	r.Handle("/notification", notificationHandler).Methods("POST")
-	r.Handle("/subscription/{userID:[0-9]+}/{employeeID:[0-9]+}", subscriptionHandler).Methods("DELETE")
-	r.Handle("/subscription", subscriptionHandler).Methods("POST")
-	r.Handle("/subscriptions/{userID:[0-9]+}", subscriptionHandler).Methods("GET")
+	r.HandleFunc("/subscription/{userID:[0-9]+}/{employeeID:[0-9]+}", subscriptionHandler.DeleteSubscription).Methods("DELETE")
+	r.HandleFunc("/subscription", subscriptionHandler.CreateSubscription).Methods("POST")
+	r.HandleFunc("/subscriptions/{userID:[0-9]+}", subscriptionHandler.GetSubscriptions).Methods("GET")
+	r.HandleFunc("/api/notifications/settings", subscriptionHandler.UpdateNotificationSettings).Methods("POST")
 
 	c := cron.New()
 	c.AddFunc("@daily", func() {
-		err := notyfyService.ScheduleDailyNotifications()
+		err := notifyService.ScheduleDailyNotifications()
 		if err != nil {
 			log.Errorf("Error scheduling daily notifications: %v", err)
 		}
