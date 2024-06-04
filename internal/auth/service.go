@@ -31,7 +31,6 @@ func NewAuthService() AuthService {
 	}
 }
 
-// Register хеширует пароль
 func (s *authService) Register(username, password string) (User, error) {
 	for _, user := range s.users {
 		if user.Username == username {
@@ -39,15 +38,15 @@ func (s *authService) Register(username, password string) (User, error) {
 		}
 	}
 
-	hashedPass, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		return User{}, nil
+		return User{}, err
 	}
 
 	user := User{
 		ID:       s.nextID,
 		Username: username,
-		Password: string(hashedPass),
+		Password: string(hashedPassword),
 	}
 	s.nextID++
 	s.users = append(s.users, user)
@@ -59,7 +58,7 @@ func (s *authService) Login(username, password string) (User, error) {
 		if user.Username == username {
 			err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
 			if err != nil {
-				return User{}, nil
+				return User{}, errors.New("invalid username or password")
 			}
 			return user, nil
 		}
