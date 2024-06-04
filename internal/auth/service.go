@@ -15,6 +15,8 @@ type User struct {
 type AuthService interface {
 	Register(username, password string) (User, error)
 	Login(username, password string) (User, error)
+	GetUsers() ([]User, error)
+	GetUser(userID int) (User, error)
 }
 
 type authService struct {
@@ -63,4 +65,17 @@ func (s *authService) Login(username, password string) (User, error) {
 		}
 	}
 	return User{}, errors.New("invalid username or password")
+}
+
+func (s *authService) GetUsers() ([]User, error) {
+	return s.users, nil
+}
+
+func (s *authService) GetUser(userID int) (User, error) {
+	for _, user := range s.users {
+		if user.ID == userID {
+			return user, nil
+		}
+	}
+	return User{}, errors.New("user not found")
 }
