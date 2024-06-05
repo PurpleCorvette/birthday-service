@@ -1,17 +1,19 @@
 package main
 
 import (
-	"birthday-service/internal/api"
 	"net/http"
+	"os"
 
 	"github.com/gorilla/mux"
+	"github.com/joho/godotenv"
+	"github.com/robfig/cron/v3"
 
+	"birthday-service/internal/api"
 	"birthday-service/internal/auth"
+	"birthday-service/internal/db"
 	"birthday-service/internal/employee"
 	"birthday-service/internal/notification"
 	"birthday-service/pkg/logging"
-	"github.com/joho/godotenv"
-	"github.com/robfig/cron/v3"
 )
 
 func main() {
@@ -22,6 +24,10 @@ func main() {
 		log.Fatalf("Error loading .env file")
 	}
 
+	dbURL := os.Getenv("DATABASE_URL")
+	db.ConnectDatabase(dbURL, log)
+	defer db.CloseDatabase(log)
+
 	r := mux.NewRouter()
 
 	authService := auth.NewAuthService()
@@ -29,9 +35,6 @@ func main() {
 
 	employeeService := employee.NewEmployeeService()
 	employeeHandler := employee.NewEmployeeHandler(employeeService)
-
-	notificationService := notification.NewNotificationService()
-	notificationHandler := notification.NewNotificationHandler(notificationService)
 
 	subscriptionService := notification.NewSubscriptionService()
 	settingsService := notification.NewSettingsService()
@@ -42,8 +45,6 @@ func main() {
 	r.Handle("/auth", authHandler).Methods("POST", "GET")
 	r.Handle("/employee/{id:[0-9]+}", employeeHandler).Methods("GET", "PUT", "DELETE")
 	r.Handle("/employee", employeeHandler).Methods("POST")
-	r.Handle("/notification/{id:[0-9]+}", notificationHandler).Methods("GET", "DELETE")
-	r.Handle("/notification", notificationHandler).Methods("POST")
 	r.HandleFunc("/subscription/{userID:[0-9]+}/{employeeID:[0-9]+}", subscriptionHandler.DeleteSubscription).Methods("DELETE")
 	r.HandleFunc("/subscription", subscriptionHandler.CreateSubscription).Methods("POST")
 	r.HandleFunc("/subscriptions/{userID:[0-9]+}", subscriptionHandler.GetSubscriptions).Methods("GET")
@@ -53,7 +54,7 @@ func main() {
 	c.AddFunc("@daily", func() {
 		err := notifyService.ScheduleDailyNotifications()
 		if err != nil {
-			log.Errorf("Error scheduling daily notifications: %v", err)
+			log.Printf("Error scheduling daily notifications: %v", err)
 		}
 	})
 	c.Start()
