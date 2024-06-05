@@ -54,16 +54,17 @@ TELEGRAM_CHAT_ID=your-chat-id
 
 ### Шаг 4: Запуск с использованием Docker
 ```sh
-docker build -t birthday-notification-service .
-docker run --env-file .env -p 8080:8080 birthday-notification-service
+docker build -t birthday-service .
+docker run --env-file .env -p 8080:8080 birthday-service
 ```
 
-## Использование
+### Использование
 Регистрация пользователя через Telegram
--Откройте Telegram и найдите вашего бота.
--Отправьте команду /start, чтобы получить приветственное сообщение.
--Отправьте команду /register <username> <password>, чтобы зарегистрироваться.
-Примеры:
+#### Откройте Telegram и найдите вашего бота.
+#### Отправьте команду /start, чтобы получить приветственное сообщение.
+#### Отправьте команду /register <username> <password>, чтобы зарегистрироваться.
+
+### Примеры:
 
 #### Добавление сотрудника:
 curl -X POST http://localhost:8080/employee -H "Content-Type: application/json" -d '{"name":"Вася Пупкин", "birthday":"1980-01-01"}'
