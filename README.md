@@ -23,6 +23,7 @@ cd birthday-service
 ```.env
 DATABASE_URL=postgres://username:password@localhost:5432/yourdatabase
 TELEGRAM_BOT_TOKEN=your-telegram-bot-token
+TELEGRAM_CHAT_ID=your-chat-id
 ```
 
 ### Шаг 3: Запуск с использованием Docker
@@ -38,11 +39,18 @@ docker run --env-file .env -p 8080:8080 birthday-notification-service
 -Отправьте команду /register <username> <password>, чтобы зарегистрироваться.
 Примеры:
 
-Добавление сотрудника
+#### Добавление сотрудника:
 curl -X POST http://localhost:8080/employee -H "Content-Type: application/json" -d '{"name":"Вася Пупкин", "birthday":"1980-01-01"}'
 
-Получение списка всех сотрудников
+#### Получение списка всех сотрудников:
 curl -X GET http://localhost:8080/employees
 
-Подписка на уведомления через Telegram
+#### Подписка на уведомления через Telegram:
 curl -X GET http://localhost:8080/employees
+
+#### Отправка уведомлений в групповой чат Telegram:
+curl -X POST http://localhost:8080/trigger-notifications
+
+#### Дополнительные команды:
+Обновление сотрудника: curl -X PUT http://localhost:8080/employee/1 -H "Content-Type: application/json" -d '{"name":"John Doe Updated", "birthday":"1980-01-02"}'
+Удаление сотрудника: curl -X DELETE http://localhost:8080/employee/1

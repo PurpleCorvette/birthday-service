@@ -16,14 +16,16 @@ type NotifyService struct {
 	employeeService     employee.EmployeeService
 	authService         auth.AuthService
 	bot                 *tgbotapi.BotAPI
+	groupChatID         int64 // Добавьте идентификатор группы, если необходимо
 }
 
-func NewNotifyService(subscriptionService SubscriptionService, employeeService employee.EmployeeService, authService auth.AuthService, bot *tgbotapi.BotAPI) *NotifyService {
+func NewNotifyService(subscriptionService SubscriptionService, employeeService employee.EmployeeService, authService auth.AuthService, bot *tgbotapi.BotAPI, groupChatID int64) *NotifyService {
 	return &NotifyService{
 		subscriptionService: subscriptionService,
 		employeeService:     employeeService,
 		authService:         authService,
 		bot:                 bot,
+		groupChatID:         groupChatID,
 	}
 }
 
@@ -42,6 +44,18 @@ func (n *NotifyService) Notify(userID, employeeID int, message string) error {
 	_, err = n.bot.Send(msg)
 	if err != nil {
 		log.Printf("failed to send message to user %d: %v", userID, err)
+		return err
+	}
+
+	return nil
+}
+
+func (n *NotifyService) NotifyGroup(employeeName string) error {
+	message := fmt.Sprintf("Сегодня день рождения у %s!", employeeName)
+	msg := tgbotapi.NewMessage(n.groupChatID, message)
+	_, err := n.bot.Send(msg)
+	if err != nil {
+		log.Printf("failed to send message to group: %v", err)
 		return err
 	}
 
@@ -69,6 +83,12 @@ func (n *NotifyService) ScheduleDailyNotifications() error {
 				if err != nil {
 					log.Printf("failed to notify user %d: %v", subscription.UserID, err)
 				}
+			}
+
+			// Отправка уведомления в группу
+			err = n.NotifyGroup(employee.Name)
+			if err != nil {
+				log.Printf("failed to notify group: %v", err)
 			}
 		}
 	}
