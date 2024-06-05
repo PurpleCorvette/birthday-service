@@ -1,51 +1,43 @@
 package notification
 
 import (
-	"context"
-	"errors"
-
-	"github.com/jackc/pgx/v4"
-
 	"birthday-service/internal/db"
+	"context"
 )
 
-type UserNotificationSettings struct {
-	UserID     int    `json:"user_id"`
-	NotifyTime string `json:"notify_time"` // Формат HH:MM
+type NotificationSettings struct {
+	UserID   int    `json:"user_id"`
+	Time     string `json:"time"`
+	Interval string `json:"interval"`
 }
 
 type SettingsService interface {
-	UpdateNotificationSettings(userID int, notifyTime string) (UserNotificationSettings, error)
-	GetNotificationSettings(userID int) (UserNotificationSettings, error)
+	UpdateSettings(settings NotificationSettings) error
+	GetSettings(userID int) (NotificationSettings, error)
 }
 
-type settingsService struct{}
-
-func NewSettingsService() SettingsService {
-	return &settingsService{}
+type settingsService struct {
+	db db.DB
 }
 
-func (s *settingsService) UpdateNotificationSettings(userID int, notifyTime string) (UserNotificationSettings, error) {
-	var settings UserNotificationSettings
-	err := db.Conn.QueryRow(context.Background(),
-		"INSERT INTO settings (user_id, notify_time) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET notify_time = $2 RETURNING user_id, notify_time",
-		userID, notifyTime).Scan(&settings.UserID, &settings.NotifyTime)
+func NewSettingsService(db db.DB) SettingsService {
+	return &settingsService{db: db}
+}
+
+func (s *settingsService) UpdateSettings(settings NotificationSettings) error {
+	_, err := s.db.Exec(context.Background(),
+		"UPDATE notification_settings SET time=$1, interval=$2 WHERE user_id=$3",
+		settings.Time, settings.Interval, settings.UserID)
+	return err
+}
+
+func (s *settingsService) GetSettings(userID int) (NotificationSettings, error) {
+	var settings NotificationSettings
+	err := s.db.QueryRow(context.Background(),
+		"SELECT user_id, time, interval FROM notification_settings WHERE user_id=$1",
+		userID).Scan(&settings.UserID, &settings.Time, &settings.Interval)
 	if err != nil {
-		return UserNotificationSettings{}, err
-	}
-
-	return settings, nil
-}
-
-func (s *settingsService) GetNotificationSettings(userID int) (UserNotificationSettings, error) {
-	var settings UserNotificationSettings
-	err := db.Conn.QueryRow(context.Background(),
-		"SELECT user_id, notify_time FROM settings WHERE user_id=$1", userID).Scan(&settings.UserID, &settings.NotifyTime)
-	if err == pgx.ErrNoRows {
-		return UserNotificationSettings{}, errors.New("settings not found")
-	}
-	if err != nil {
-		return UserNotificationSettings{}, err
+		return NotificationSettings{}, err
 	}
 
 	return settings, nil

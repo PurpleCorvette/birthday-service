@@ -2,3 +2,4 @@
 /.idea
 .env
 logs/all.log
+/logs

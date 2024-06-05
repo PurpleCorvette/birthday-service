@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"os"
 
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/gorilla/mux"
 	"github.com/joho/godotenv"
 	"github.com/robfig/cron/v3"
@@ -13,6 +14,7 @@ import (
 	"birthday-service/internal/db"
 	"birthday-service/internal/employee"
 	"birthday-service/internal/notification"
+	"birthday-service/internal/teltegram"
 	"birthday-service/pkg/logging"
 )
 
@@ -24,27 +26,47 @@ func main() {
 		log.Fatalf("Error loading .env file")
 	}
 
+	// Connect to the database
 	dbURL := os.Getenv("DATABASE_URL")
-	db.ConnectDatabase(dbURL, log)
-	defer db.CloseDatabase(log)
+	database, err := db.ConnectDatabase(dbURL)
+	if err != nil {
+		log.Fatalf("Could not connect to database: %s", err)
+	}
+	defer database.Close()
+
+	// Create Telegram bot
+	botToken := os.Getenv("TELEGRAM_BOT_TOKEN")
+	bot, err := tgbotapi.NewBotAPI(botToken)
+	if err != nil {
+		log.Fatalf("Error creating Telegram bot: %s", err)
+	}
 
 	r := mux.NewRouter()
 
-	authService := auth.NewAuthService()
+	authService := auth.NewAuthService(database)
 	authHandler := auth.NewAuthHandler(authService)
 
-	employeeService := employee.NewEmployeeService()
+	employeeService := employee.NewEmployeeService(database)
 	employeeHandler := employee.NewEmployeeHandler(employeeService)
 
-	subscriptionService := notification.NewSubscriptionService()
-	settingsService := notification.NewSettingsService()
+	subscriptionService := notification.NewSubscriptionService(database)
+	settingsService := notification.NewSettingsService(database)
 	subscriptionHandler := api.NewSubscriptionHandler(subscriptionService, settingsService)
 
-	notifyService := notification.NewNotifyService(subscriptionService, employeeService, authService)
+	notifyService := notification.NewNotifyService(subscriptionService, employeeService, authService, bot)
+
+	telegramBot, err := teltegram.NewBot(authService, employeeService, subscriptionService)
+	if err != nil {
+		log.Fatalf("Error creating Telegram bot: %s", err)
+	}
+	go telegramBot.Start()
 
 	r.Handle("/auth", authHandler).Methods("POST", "GET")
-	r.Handle("/employee/{id:[0-9]+}", employeeHandler).Methods("GET", "PUT", "DELETE")
-	r.Handle("/employee", employeeHandler).Methods("POST")
+	r.HandleFunc("/employee/{id:[0-9]+}", employeeHandler.GetEmployee).Methods("GET")
+	r.HandleFunc("/employee", employeeHandler.AddEmployee).Methods("POST")
+	r.HandleFunc("/employees", employeeHandler.GetAllEmployees).Methods("GET")
+	r.HandleFunc("/employee/{id:[0-9]+}", employeeHandler.UpdateEmployee).Methods("PUT")
+	r.HandleFunc("/employee/{id:[0-9]+}", employeeHandler.DeleteEmployee).Methods("DELETE")
 	r.HandleFunc("/subscription/{userID:[0-9]+}/{employeeID:[0-9]+}", subscriptionHandler.DeleteSubscription).Methods("DELETE")
 	r.HandleFunc("/subscription", subscriptionHandler.CreateSubscription).Methods("POST")
 	r.HandleFunc("/subscriptions/{userID:[0-9]+}", subscriptionHandler.GetSubscriptions).Methods("GET")
