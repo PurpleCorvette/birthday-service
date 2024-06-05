@@ -18,7 +18,33 @@ git clone https://github.com/PurpleCorvette/birthday-service.git
 cd birthday-service 
 ```
 
-### Шаг 2: Настройка переменных окружения
+### Шаг 2: Настройка базы данных PostgreSQL
+```sql
+CREATE DATABASE yourdatabase;
+CREATE USER yourusername WITH ENCRYPTED PASSWORD 'yourpassword';
+GRANT ALL PRIVILEGES ON DATABASE yourdatabase TO yourusername;
+
+CREATE TABLE users (
+                       id SERIAL PRIMARY KEY,
+                       username VARCHAR(255) UNIQUE NOT NULL,
+                       password_hash VARCHAR(255) NOT NULL,
+                       telegram_id BIGINT UNIQUE
+);
+
+CREATE TABLE employees (
+                           id SERIAL PRIMARY KEY,
+                           name VARCHAR(255) NOT NULL,
+                           birthday DATE NOT NULL
+);
+
+CREATE TABLE subscriptions (
+                               user_id INT REFERENCES users(id),
+                               employee_id INT REFERENCES employees(id),
+                               PRIMARY KEY (user_id, employee_id)
+);
+```
+
+### Шаг 3: Настройка переменных окружения
 Создайте файл .env в корне проекта и укажите в нем необходимые переменные окружения:
 ```.env
 DATABASE_URL=postgres://username:password@localhost:5432/yourdatabase
@@ -26,7 +52,7 @@ TELEGRAM_BOT_TOKEN=your-telegram-bot-token
 TELEGRAM_CHAT_ID=your-chat-id
 ```
 
-### Шаг 3: Запуск с использованием Docker
+### Шаг 4: Запуск с использованием Docker
 ```sh
 docker build -t birthday-notification-service .
 docker run --env-file .env -p 8080:8080 birthday-notification-service
