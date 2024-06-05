@@ -1,6 +1,10 @@
 package notification
 
-import "errors"
+import (
+	"context"
+
+	"birthday-service/internal/db"
+)
 
 type Subscription struct {
 	ID         int `json:"id"`
@@ -14,51 +18,50 @@ type SubscriptionService interface {
 	ListSubscriptions(userID int) ([]Subscription, error)
 }
 
-type subscriptionService struct {
-	subscriptions []Subscription
-	nextID        int
-}
+type subscriptionService struct{}
 
 func NewSubscriptionService() SubscriptionService {
-	return &subscriptionService{
-		subscriptions: []Subscription{},
-		nextID:        1,
-	}
+	return &subscriptionService{}
 }
 
 func (s *subscriptionService) Subscribe(userID, employeeID int) (Subscription, error) {
-	for _, sub := range s.subscriptions {
-		if sub.UserID == userID && sub.EmployeeID == employeeID {
-			return Subscription{}, errors.New("already subscribed")
-		}
+	var sub Subscription
+	err := db.Conn.QueryRow(context.Background(),
+		"INSERT INTO subscriptions (user_id, employee_id) VALUES ($1, $2) RETURNING id, user_id, employee_id",
+		userID, employeeID).Scan(&sub.ID, &sub.UserID, &sub.EmployeeID)
+	if err != nil {
+		return Subscription{}, err
 	}
 
-	subscription := Subscription{
-		ID:         s.nextID,
-		UserID:     userID,
-		EmployeeID: employeeID,
-	}
-	s.nextID++
-	s.subscriptions = append(s.subscriptions, subscription)
-	return subscription, nil
+	return sub, nil
 }
 
 func (s *subscriptionService) Unsubscribe(userID, employeeID int) error {
-	for i, sub := range s.subscriptions {
-		if sub.UserID == userID && sub.EmployeeID == employeeID {
-			s.subscriptions = append(s.subscriptions[:i], s.subscriptions[i+1:]...)
-			return nil
-		}
+	_, err := db.Conn.Exec(context.Background(), "DELETE FROM subscriptions WHERE user_id=$1 AND employee_id=$2",
+		userID, employeeID)
+	if err != nil {
+		return err
 	}
-	return errors.New("subscription not found")
+
+	return nil
 }
 
 func (s *subscriptionService) ListSubscriptions(userID int) ([]Subscription, error) {
-	var result []Subscription
-	for _, sub := range s.subscriptions {
-		if sub.UserID == userID {
-			result = append(result, sub)
-		}
+	rows, err := db.Conn.Query(context.Background(), "SELECT id, user_id, employee_id FROM subscriptions WHERE user_id=$1", userID)
+	if err != nil {
+		return nil, err
 	}
-	return result, nil
+	defer rows.Close()
+
+	var subs []Subscription
+	for rows.Next() {
+		var sub Subscription
+		err := rows.Scan(&sub.ID, &sub.UserID, &sub.EmployeeID)
+		if err != nil {
+			return nil, err
+		}
+		subs = append(subs, sub)
+	}
+
+	return subs, nil
 }

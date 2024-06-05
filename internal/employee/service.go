@@ -1,11 +1,18 @@
 package employee
 
-import "errors"
+import (
+	"context"
+	"errors"
+
+	"github.com/jackc/pgx/v4"
+
+	"birthday-service/internal/db"
+)
 
 type Employee struct {
 	ID   int    `json:"id"`
 	Name string `json:"name"`
-	DOB  string `json:"dob"` // day of birth
+	DOB  string `json:"dob"`
 }
 
 type EmployeeService interface {
@@ -13,62 +20,63 @@ type EmployeeService interface {
 	GetEmployee(id int) (Employee, error)
 	UpdateEmployee(id int, name, dob string) (Employee, error)
 	DeleteEmployee(id int) error
-	ListEmployees() ([]Employee, error)
 }
 
-type employeeService struct {
-	employees []Employee
-	nextID    int
-}
+type employeeService struct{}
 
 func NewEmployeeService() EmployeeService {
-	return &employeeService{
-		employees: []Employee{},
-		nextID:    1,
-	}
+	return &employeeService{}
 }
 
 func (s *employeeService) AddEmployee(name, dob string) (Employee, error) {
-	employee := Employee{
-		ID:   s.nextID,
-		Name: name,
-		DOB:  dob,
+	var emp Employee
+	err := db.Conn.QueryRow(context.Background(),
+		"INSERT INTO employees (name, dob) VALUES ($1, $2) RETURNING id, name, dob",
+		name, dob).Scan(&emp.ID, &emp.Name, &emp.DOB)
+	if err != nil {
+		return Employee{}, err
 	}
-	s.nextID++
-	s.employees = append(s.employees, employee)
-	return employee, nil
+
+	return emp, nil
 }
 
 func (s *employeeService) GetEmployee(id int) (Employee, error) {
-	for _, emp := range s.employees {
-		if emp.ID == id {
-			return emp, nil
-		}
+	var emp Employee
+	err := db.Conn.QueryRow(context.Background(),
+		"SELECT id, name, dob FROM employees WHERE id=$1", id).Scan(&emp.ID, &emp.Name, &emp.DOB)
+	if err == pgx.ErrNoRows {
+		return Employee{}, errors.New("employee not found")
 	}
-	return Employee{}, errors.New("employee not found")
+	if err != nil {
+		return Employee{}, err
+	}
+
+	return emp, nil
 }
 
 func (s *employeeService) UpdateEmployee(id int, name, dob string) (Employee, error) {
-	for i, emp := range s.employees {
-		if emp.ID == id {
-			s.employees[i].Name = name
-			s.employees[i].DOB = dob
-			return s.employees[i], nil
-		}
+	var emp Employee
+	err := db.Conn.QueryRow(context.Background(),
+		"UPDATE employees SET name=$1, dob=$2 WHERE id=$3 RETURNING id, name, dob",
+		name, dob, id).Scan(&emp.ID, &emp.Name, &emp.DOB)
+	if err == pgx.ErrNoRows {
+		return Employee{}, errors.New("employee not found")
 	}
-	return Employee{}, errors.New("employee not found")
+	if err != nil {
+		return Employee{}, err
+	}
+
+	return emp, nil
 }
 
 func (s *employeeService) DeleteEmployee(id int) error {
-	for i, emp := range s.employees {
-		if emp.ID == id {
-			s.employees = append(s.employees[:i], s.employees[i+1:]...)
-			return nil
-		}
+	_, err := db.Conn.Exec(context.Background(), "DELETE FROM employees WHERE id=$1", id)
+	if err == pgx.ErrNoRows {
+		return errors.New("employee not found")
 	}
-	return errors.New("employee not found")
-}
+	if err != nil {
+		return err
+	}
 
-func (s *employeeService) ListEmployees() ([]Employee, error) {
-	return s.employees, nil
+	return nil
 }

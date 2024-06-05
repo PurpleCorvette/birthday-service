@@ -33,3 +33,7 @@
 ## Установка и запуск
 
 ### Клонирование репозитория
+ ```sh
+   git clone https://github.com/yourusername/birthday-notification-service.git
+   cd birthday-notification-service
+
