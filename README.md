@@ -52,5 +52,7 @@ curl -X GET http://localhost:8080/employees
 curl -X POST http://localhost:8080/trigger-notifications
 
 #### Дополнительные команды:
-Обновление сотрудника: curl -X PUT http://localhost:8080/employee/1 -H "Content-Type: application/json" -d '{"name":"John Doe Updated", "birthday":"1980-01-02"}'
-Удаление сотрудника: curl -X DELETE http://localhost:8080/employee/1
+##### Обновление сотрудника:
+curl -X PUT http://localhost:8080/employee/1 -H "Content-Type: application/json" -d '{"name":"Вася Пупкин Updated", "birthday":"1980-01-02"}'
+##### Удаление сотрудника: 
+curl -X DELETE http://localhost:8080/employee/1
