@@ -1,44 +1,47 @@
 package auth
 
 import (
+	"birthday-service/internal/db"
 	"context"
 	"errors"
-
-	"github.com/jackc/pgx/v4"
 	"golang.org/x/crypto/bcrypt"
 
-	"birthday-service/internal/db"
+	"github.com/jackc/pgx/v4"
 )
 
 type User struct {
-	ID       int    `json:"id"`
-	Username string `json:"username"`
-	Password string `json:"password"`
+	ID         int    `json:"id"`
+	Username   string `json:"username"`
+	Password   string `json:"password"`
+	TelegramID int64  `json:"telegram_id"`
 }
 
 type AuthService interface {
-	Register(username, password string) (User, error)
+	Register(username, password string, telegramID int64) (User, error)
 	Login(username, password string) (User, error)
-	GetUsers() ([]User, error)
 	GetUser(userID int) (User, error)
+	GetUsers() ([]User, error)
+	GetUserByTelegramID(telegramID int64) (User, error)
 }
 
-type authService struct{}
-
-func NewAuthService() AuthService {
-	return &authService{}
+type authService struct {
+	db db.DB
 }
 
-func (s *authService) Register(username, password string) (User, error) {
+func NewAuthService(db db.DB) AuthService {
+	return &authService{db: db}
+}
+
+func (s *authService) Register(username, password string, telegramID int64) (User, error) {
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return User{}, err
 	}
 
 	var user User
-	err = db.Conn.QueryRow(context.Background(),
-		"INSERT INTO users (username, password) VALUES ($1, $2) RETURNING id, username",
-		username, string(hashedPassword)).Scan(&user.ID, &user.Username)
+	err = s.db.QueryRow(context.Background(),
+		"INSERT INTO users (username, password, telegram_id) VALUES ($1, $2, $3) RETURNING id, username, telegram_id",
+		username, string(hashedPassword), telegramID).Scan(&user.ID, &user.Username, &user.TelegramID)
 	if err != nil {
 		return User{}, err
 	}
@@ -48,8 +51,9 @@ func (s *authService) Register(username, password string) (User, error) {
 
 func (s *authService) Login(username, password string) (User, error) {
 	var user User
-	err := db.Conn.QueryRow(context.Background(),
-		"SELECT id, username, password FROM users WHERE username=$1", username).Scan(&user.ID, &user.Username, &user.Password)
+	err := s.db.QueryRow(context.Background(),
+		"SELECT id, username, password, telegram_id FROM users WHERE username=$1",
+		username).Scan(&user.ID, &user.Username, &user.Password, &user.TelegramID)
 	if err == pgx.ErrNoRows {
 		return User{}, errors.New("invalid username or password")
 	}
@@ -67,8 +71,8 @@ func (s *authService) Login(username, password string) (User, error) {
 
 func (s *authService) GetUser(userID int) (User, error) {
 	var user User
-	err := db.Conn.QueryRow(context.Background(),
-		"SELECT id, username FROM users WHERE id=$1", user).Scan(&user.ID, &user.Username)
+	err := s.db.QueryRow(context.Background(),
+		"SELECT id, username, telegram_id FROM users WHERE id=$1", userID).Scan(&user.ID, &user.Username, &user.TelegramID)
 	if err == pgx.ErrNoRows {
 		return User{}, errors.New("user not found")
 	}
@@ -80,8 +84,7 @@ func (s *authService) GetUser(userID int) (User, error) {
 }
 
 func (s *authService) GetUsers() ([]User, error) {
-	rows, err := db.Conn.Query(context.Background(),
-		"SELECT id, username FROM users")
+	rows, err := s.db.Query(context.Background(), "SELECT id, username, telegram_id FROM users")
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +93,7 @@ func (s *authService) GetUsers() ([]User, error) {
 	var users []User
 	for rows.Next() {
 		var user User
-		err := rows.Scan(&user.ID, &user.Username)
+		err := rows.Scan(&user.ID, &user.Username, &user.TelegramID)
 		if err != nil {
 			return nil, err
 		}
@@ -98,4 +101,18 @@ func (s *authService) GetUsers() ([]User, error) {
 	}
 
 	return users, nil
+}
+
+func (s *authService) GetUserByTelegramID(telegramID int64) (User, error) {
+	var user User
+	err := s.db.QueryRow(context.Background(),
+		"SELECT id, username, telegram_id FROM users WHERE telegram_id=$1", telegramID).Scan(&user.ID, &user.Username, &user.TelegramID)
+	if err == pgx.ErrNoRows {
+		return User{}, errors.New("user not found")
+	}
+	if err != nil {
+		return User{}, err
+	}
+
+	return user, nil
 }

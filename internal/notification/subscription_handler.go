@@ -9,67 +9,87 @@ import (
 )
 
 type SubscriptionHandler struct {
-	service SubscriptionService
+	subscriptionService SubscriptionService
+	settingsService     SettingsService
 }
 
-func NewSubscriptionHandler(service SubscriptionService) *SubscriptionHandler {
-	return &SubscriptionHandler{service: service}
-}
-
-func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case "POST":
-		var sub Subscription
-		if err := json.NewDecoder(r.Body).Decode(&sub); err != nil {
-			http.Error(w, "invalid request payload", http.StatusBadRequest)
-			return
-		}
-
-		newSub, err := h.service.Subscribe(sub.UserID, sub.EmployeeID)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(newSub)
-	case "DELETE":
-		params := mux.Vars(r)
-		userID, err := strconv.Atoi(params["userID"])
-		if err != nil {
-			http.Error(w, "invalid user ID", http.StatusBadRequest)
-			return
-		}
-
-		employeeID, err := strconv.Atoi(params["employeeID"])
-		if err != nil {
-			http.Error(w, "invalid employee ID", http.StatusBadRequest)
-			return
-		}
-
-		if err := h.service.Unsubscribe(userID, employeeID); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-
-		w.WriteHeader(http.StatusNoContent)
-	case "GET":
-		params := mux.Vars(r)
-		userID, err := strconv.Atoi(params["userID"])
-		if err != nil {
-			http.Error(w, "invalid user ID", http.StatusBadRequest)
-			return
-		}
-
-		subs, err := h.service.ListSubscriptions(userID)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(subs)
-	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+func NewSubscriptionHandler(subscriptionService SubscriptionService, settingsService SettingsService) *SubscriptionHandler {
+	return &SubscriptionHandler{
+		subscriptionService: subscriptionService,
+		settingsService:     settingsService,
 	}
+}
+
+func (h *SubscriptionHandler) CreateSubscription(w http.ResponseWriter, r *http.Request) {
+	var sub Subscription
+	err := json.NewDecoder(r.Body).Decode(&sub)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	err = h.subscriptionService.Subscribe(sub.UserID, sub.EmployeeID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
+}
+
+func (h *SubscriptionHandler) DeleteSubscription(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	userID, err := strconv.Atoi(vars["userID"])
+	if err != nil {
+		http.Error(w, "Invalid user ID", http.StatusBadRequest)
+		return
+	}
+	employeeID, err := strconv.Atoi(vars["employeeID"])
+	if err != nil {
+		http.Error(w, "Invalid employee ID", http.StatusBadRequest)
+		return
+	}
+
+	err = h.subscriptionService.Unsubscribe(userID, employeeID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *SubscriptionHandler) GetSubscriptions(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	userID, err := strconv.Atoi(vars["userID"])
+	if err != nil {
+		http.Error(w, "Invalid user ID", http.StatusBadRequest)
+		return
+	}
+
+	subscriptions, err := h.subscriptionService.GetSubscriptions(userID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(subscriptions)
+}
+
+func (h *SubscriptionHandler) UpdateNotificationSettings(w http.ResponseWriter, r *http.Request) {
+	var settings NotificationSettings
+	err := json.NewDecoder(r.Body).Decode(&settings)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	err = h.settingsService.UpdateSettings(settings)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }

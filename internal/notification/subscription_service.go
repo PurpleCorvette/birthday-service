@@ -7,61 +7,56 @@ import (
 )
 
 type Subscription struct {
-	ID         int `json:"id"`
 	UserID     int `json:"user_id"`
 	EmployeeID int `json:"employee_id"`
 }
 
 type SubscriptionService interface {
-	Subscribe(userID, employeeID int) (Subscription, error)
+	Subscribe(userID, employeeID int) error
 	Unsubscribe(userID, employeeID int) error
-	ListSubscriptions(userID int) ([]Subscription, error)
+	GetSubscriptions(userID int) ([]Subscription, error)
 }
 
-type subscriptionService struct{}
-
-func NewSubscriptionService() SubscriptionService {
-	return &subscriptionService{}
+type subscriptionService struct {
+	db db.DB
 }
 
-func (s *subscriptionService) Subscribe(userID, employeeID int) (Subscription, error) {
-	var sub Subscription
-	err := db.Conn.QueryRow(context.Background(),
-		"INSERT INTO subscriptions (user_id, employee_id) VALUES ($1, $2) RETURNING id, user_id, employee_id",
-		userID, employeeID).Scan(&sub.ID, &sub.UserID, &sub.EmployeeID)
-	if err != nil {
-		return Subscription{}, err
-	}
+func NewSubscriptionService(db db.DB) SubscriptionService {
+	return &subscriptionService{db: db}
+}
 
-	return sub, nil
+func (s *subscriptionService) Subscribe(userID, employeeID int) error {
+	_, err := s.db.Exec(context.Background(),
+		"INSERT INTO subscriptions (user_id, employee_id) VALUES ($1, $2)",
+		userID, employeeID)
+	return err
 }
 
 func (s *subscriptionService) Unsubscribe(userID, employeeID int) error {
-	_, err := db.Conn.Exec(context.Background(), "DELETE FROM subscriptions WHERE user_id=$1 AND employee_id=$2",
+	_, err := s.db.Exec(context.Background(),
+		"DELETE FROM subscriptions WHERE user_id=$1 AND employee_id=$2",
 		userID, employeeID)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return err
 }
 
-func (s *subscriptionService) ListSubscriptions(userID int) ([]Subscription, error) {
-	rows, err := db.Conn.Query(context.Background(), "SELECT id, user_id, employee_id FROM subscriptions WHERE user_id=$1", userID)
+func (s *subscriptionService) GetSubscriptions(userID int) ([]Subscription, error) {
+	rows, err := s.db.Query(context.Background(),
+		"SELECT user_id, employee_id FROM subscriptions WHERE user_id=$1",
+		userID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var subs []Subscription
+	var subscriptions []Subscription
 	for rows.Next() {
-		var sub Subscription
-		err := rows.Scan(&sub.ID, &sub.UserID, &sub.EmployeeID)
+		var subscription Subscription
+		err := rows.Scan(&subscription.UserID, &subscription.EmployeeID)
 		if err != nil {
 			return nil, err
 		}
-		subs = append(subs, sub)
+		subscriptions = append(subscriptions, subscription)
 	}
 
-	return subs, nil
+	return subscriptions, nil
 }

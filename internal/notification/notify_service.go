@@ -1,9 +1,8 @@
 package notification
 
 import (
-	"errors"
 	"fmt"
-	"os"
+	"log"
 	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -12,85 +11,67 @@ import (
 	"birthday-service/internal/employee"
 )
 
-type NotifyService interface {
-	Notify(userID, employeeID int, message string) error
-	ScheduleDailyNotifications() error
-}
-
-type notifyService struct {
+type NotifyService struct {
 	subscriptionService SubscriptionService
 	employeeService     employee.EmployeeService
-	userService         auth.AuthService
+	authService         auth.AuthService
+	bot                 *tgbotapi.BotAPI
 }
 
-func NewNotifyService(subServ SubscriptionService, empServ employee.EmployeeService, userServ auth.AuthService) NotifyService {
-	return &notifyService{
-		subscriptionService: subServ,
-		employeeService:     empServ,
-		userService:         userServ,
+func NewNotifyService(subscriptionService SubscriptionService, employeeService employee.EmployeeService, authService auth.AuthService, bot *tgbotapi.BotAPI) *NotifyService {
+	return &NotifyService{
+		subscriptionService: subscriptionService,
+		employeeService:     employeeService,
+		authService:         authService,
+		bot:                 bot,
 	}
 }
 
-func (n *notifyService) Notify(userID, employeeID int, message string) error {
-	botToken := os.Getenv("TELEGRAM_BOT_TOKEN")
-	bot, err := tgbotapi.NewBotAPI(botToken)
+func (n *NotifyService) Notify(userID, employeeID int, message string) error {
+	user, err := n.authService.GetUser(userID)
 	if err != nil {
 		return err
 	}
 
-	user, err := n.userService.GetUser(userID)
-	if err != nil {
-		return err
+	chatID := user.TelegramID
+	if chatID == 0 {
+		return fmt.Errorf("user %d does not have a Telegram ID", userID)
 	}
 
-	employee, err := n.employeeService.GetEmployee(employeeID)
+	msg := tgbotapi.NewMessage(chatID, message)
+	_, err = n.bot.Send(msg)
 	if err != nil {
-		return err
-	}
-
-	chatID := os.Getenv("TELEGRAM_CHAT_ID")
-	if chatID == "" {
-		return errors.New("TELEGRAM_CHAT_ID is not set")
-	}
-
-	personalizedMessage := fmt.Sprintf("Привет, %s! Сегодня день рождения у %s. Не забудьте поздравить!", user.Username, employee.Name)
-	msg := tgbotapi.NewMessageToChannel(chatID, personalizedMessage)
-	_, err = bot.Send(msg)
-	if err != nil {
+		log.Printf("failed to send message to user %d: %v", userID, err)
 		return err
 	}
 
 	return nil
 }
 
-func (n *notifyService) ScheduleDailyNotifications() error {
-	users, err := n.userService.GetUsers()
+func (n *NotifyService) ScheduleDailyNotifications() error {
+	employees, err := n.employeeService.GetAllEmployees()
 	if err != nil {
 		return err
 	}
 
-	for _, user := range users {
-		subscriptions, err := n.subscriptionService.ListSubscriptions(user.ID)
-		if err != nil {
-			return err
-		}
-
-		for _, sub := range subscriptions {
-			empl, err := n.employeeService.GetEmployee(sub.EmployeeID)
+	today := time.Now().Format("2006-01-02")
+	for _, employee := range employees {
+		if employee.Birthday.Format("2006-01-02") == today {
+			subscriptions, err := n.subscriptionService.GetSubscriptions(employee.ID)
 			if err != nil {
-				return err
+				log.Printf("failed to get subscriptions for employee %d: %v", employee.ID, err)
+				continue
 			}
 
-			// Check if today is the empl's birthday
-			today := time.Now().Format("2006-01-02")
-			if empl.DOB == today {
-				message := fmt.Sprintf("Сегодня день рождения у %s. Не забудьте поздравить!", empl.Name)
-				err = n.Notify(user.ID, empl.ID, message)
+			message := fmt.Sprintf("Сегодня день рождения у %s!", employee.Name)
+			for _, subscription := range subscriptions {
+				err = n.Notify(subscription.UserID, employee.ID, message)
 				if err != nil {
-					return err
+					log.Printf("failed to notify user %d: %v", subscription.UserID, err)
 				}
 			}
 		}
 	}
+
 	return nil
 }

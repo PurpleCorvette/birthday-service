@@ -2,9 +2,10 @@ package auth
 
 import (
 	"encoding/json"
-	"github.com/gorilla/mux"
 	"net/http"
 	"strconv"
+
+	"github.com/gorilla/mux"
 )
 
 type AuthHandler struct {
@@ -16,8 +17,9 @@ func NewAuthHandler(service AuthService) *AuthHandler {
 }
 
 type registerRequest struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
+	Username   string `json:"username"`
+	Password   string `json:"password"`
+	TelegramID string `json:"telegram_id"`
 }
 
 type loginRequest struct {
@@ -43,7 +45,13 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := h.service.Register(req.Username, req.Password)
+	telegramID, err := strconv.ParseInt(req.TelegramID, 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid Telegram ID", http.StatusBadRequest)
+		return
+	}
+
+	user, err := h.service.Register(req.Username, req.Password, telegramID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
